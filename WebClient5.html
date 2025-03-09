@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>후석 편의기능 통합 제어</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f9;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    .container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      justify-content: center;
+    }
+    .section {
+      background-color: #fff;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      width: 300px;
+    }
+    button {
+      background-color: #007BFF;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      font-size: 16px;
+      margin: 5px;
+      cursor: pointer;
+      border-radius: 5px;
+      transition: background-color 0.3s;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    select, input[type="range"] {
+      margin: 10px 0;
+    }
+    .volume-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 10px 0;
+    }
+    .center-button {
+      display: block;
+      margin: 20px auto;
+      text-align: center;
+    }
+    #status {
+      color: red;
+      font-weight: bold;
+      text-align: center;
+    }
+    /* 창문 제어 버튼을 위아래로 배치 */
+    .window-controls {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .window-controls button {
+      width: 100%;
+      height: 50px;
+      font-size: 24px;
+      margin: 5px 0;
+    }
+  </style>
+  <script>
+    let socket;
+    const buttonStates = {};
+
+    // WebSocket 서버 연결
+    function connectWebSocket() {
+      const esp32Address = "ws://192.168.4.1:81";
+      socket = new WebSocket(esp32Address);
+
+      socket.onopen = () => {
+        console.log("WebSocket 연결 성공");
+        document.getElementById("status").innerText = "Connected";
+        document.getElementById("status").style.color = "green";
+      };
+
+      socket.onmessage = (event) => {
+        console.log("ESP32 응답:", event.data);
+        alert("ESP32 응답: " + event.data);
+      };
+
+      socket.onclose = () => {
+        console.log("WebSocket 연결 종료");
+        document.getElementById("status").innerText = "Disconnected";
+        document.getElementById("status").style.color = "red";
+      };
+
+      socket.onerror = (error) => {
+        console.error("WebSocket 오류:", error);
+      };
+    }
+
+    // CAN 명령 전송
+    function sendCANCommand(id, signal_num, value) {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        const message = { id, signal_num, value };
+        socket.send(JSON.stringify(message));
+        console.log("ESP32로 전송된 메시지:", message);
+      } else {
+        alert("WebSocket 연결이 설정되지 않았습니다.");
+      }
+    }
+
+    // 버튼 상태 전환 및 전송
+    function toggleButton(id, signal_num, buttonId, activeLabel, inactiveLabel) {
+      const button = document.getElementById(buttonId);
+      const isActive = buttonStates[buttonId] || false;
+
+      if (isActive) {
+        sendCANCommand(id, signal_num, 0);
+        button.innerText = activeLabel;
+      } else {
+        sendCANCommand(id, signal_num, 1);
+        button.innerText = inactiveLabel;
+      }
+
+      buttonStates[buttonId] = !isActive;
+    }
+
+    function setVolume() {
+      const volume = document.getElementById("volumeSlider").value;
+      sendCANCommand(0x303, 2, parseInt(volume));
+    }
+
+    function updateVolumeDisplay() {
+      const volume = document.getElementById("volumeSlider").value;
+      document.getElementById("volumeValue").innerText = volume;
+    }
+
+    function setEqualizer() {
+      const equalizer = document.getElementById("equalizerSelect").value;
+      sendCANCommand(0x303, 3, parseInt(equalizer));
+    }
+
+    function setPlaybackMode() {
+      const mode = document.getElementById("playbackModeSelect").value;
+      sendCANCommand(0x303, 4, parseInt(mode));
+    }
+  </script>
+</head>
+<body>
+  <h1>G90 후석 편의기능 통합제어</h1>
+  <p id="status">Disconnected</p>
+  <div>
+    <button onclick="connectWebSocket()">Connect</button>
+  </div>
+  <div class="container">
+    <div class="section">
+      <h2>시트 제어</h2>
+      <h3>자동 제어</h3>
+      <button onclick="sendCANCommand(0x300, 1, 1)">릴렉스 모드 ON</button>
+      <button onclick="sendCANCommand(0x300, 1, 0)">릴렉스 모드 OFF</button>
+      <h3>조수석 시트 제어</h3>
+      <button onclick="sendCANCommand(0x300, 2, 1)">◀</button>
+      <button onclick="sendCANCommand(0x300, 2, 0)">■</button>
+      <button onclick="sendCANCommand(0x300, 2, 2)">▶</button>
+      <h3>조수석 등받이 제어</h3>
+      <button onclick="sendCANCommand(0x300, 3, 1)">◀</button>
+      <button onclick="sendCANCommand(0x300, 3, 0)">■</button>
+      <button onclick="sendCANCommand(0x300, 3, 2)">▶</button>
+      <h3>뒷좌석 등받이 제어</h3>
+      <button onclick="sendCANCommand(0x300, 4, 1)">◀</button>
+      <button onclick="sendCANCommand(0x300, 4, 0)">■</button>
+      <button onclick="sendCANCommand(0x300, 4, 2)">▶</button>
+    </div>
+
+    <div class="section">
+      <h2>창문 제어</h2>
+      <!-- 버튼을 세로로 배치하고 아이콘을 변경 -->
+      <div class="window-controls">
+        <button onclick="sendCANCommand(0x302, 1, 1)">▲</button>
+        <button onclick="sendCANCommand(0x302, 0, 0)">■</button>
+        <button onclick="sendCANCommand(0x302, 2, 1)">▼</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>히터 및 통풍 제어</h2>
+      <h3>쿠션 히터</h3>
+      <button onclick="sendCANCommand(0x301, 1, 0)">OFF</button>
+      <button onclick="sendCANCommand(0x301, 1, 1)">1단</button>
+      <button onclick="sendCANCommand(0x301, 1, 2)">2단</button>
+      <button onclick="sendCANCommand(0x301, 1, 3)">3단</button>
+
+      <h3>등받이 히터</h3>
+      <button onclick="sendCANCommand(0x301, 2, 0)">OFF</button>
+      <button onclick="sendCANCommand(0x301, 2, 1)">1단</button>
+      <button onclick="sendCANCommand(0x301, 2, 2)">2단</button>
+      <button onclick="sendCANCommand(0x301, 2, 3)">3단</button>
+    </div>
+
+    <div class="section">
+      <h2>MP3 제어</h2>
+      <button onclick="sendCANCommand(0x303, 1, 0x01)">다음곡 재생</button>
+      <button onclick="sendCANCommand(0x303, 1, 0x02)">이전곡 재생</button>
+      <button onclick="sendCANCommand(0x303, 1, 0x04)">볼륨 키우기</button>
+      <button onclick="sendCANCommand(0x303, 1, 0x05)">볼륨 줄이기</button>
+      <button onclick="sendCANCommand(0x303, 1, 0x0D)">노래 재생</button>
+      <button onclick="sendCANCommand(0x303, 1, 0x0E)">노래 정지</button>
+
+      <h3>특정 볼륨 설정</h3>
+      <div class="volume-container">
+        <input
+          id="volumeSlider"
+          type="range"
+          min="0"
+          max="20"
+          step="1"
+          value="10"
+          oninput="updateVolumeDisplay()"
+        />
+        <span id="volumeValue">10</span>
+      </div>
+      <div class="center-button">
+        <button onclick="setVolume()">설정</button>
+      </div>
+
+      <h3>이퀄라이저 설정</h3>
+      <select id="equalizerSelect">
+        <option value="0">Normal</option>
+        <option value="1">Pop</option>
+        <option value="2">Rock</option>
+        <option value="3">Jazz</option>
+        <option value="4">Classic</option>
+        <option value="5">Base</option>
+      </select>
+      <div class="center-button">
+        <button onclick="setEqualizer()">설정</button>
+      </div>
+
+      <h3>재생 모드 설정</h3>
+      <select id="playbackModeSelect">
+        <option value="0">Repeat</option>
+        <option value="1">Folder Repeat</option>
+        <option value="2">Single Repeat</option>
+        <option value="3">Random</option>
+      </select>
+      <div class="center-button">
+        <button onclick="setPlaybackMode()">설정</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
